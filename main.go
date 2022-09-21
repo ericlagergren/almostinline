@@ -12,9 +12,15 @@ import (
 
 func main() {
 	threshold := flag.Int("threshold", 15, "inlining budget to test for")
+	all := flag.Bool("all", false, "check all packages, not just current")
 	flag.Parse()
 
-	args := []string{"build", "-a", "-gcflags=all=-m -m"}
+	gcflags := "-gcflags="
+	if *all {
+		gcflags += "all="
+	}
+	gcflags += "-m -m"
+	args := []string{"build", "-a", gcflags}
 	args = append(args, flag.Args()...)
 
 	out, err := exec.Command("go", args...).CombinedOutput()
@@ -32,7 +38,7 @@ func main() {
 		Budget int
 	}
 
-	var all []Match
+	var found []Match
 
 	rx := regexp.MustCompile(`(?m)^(.*):(\d+):\d+: cannot inline (.*): function too complex: cost (\d+) exceeds budget (\d+)$`)
 	for _, matches := range rx.FindAllStringSubmatch(string(out), -1) {
@@ -56,14 +62,15 @@ func main() {
 			continue
 		}
 
-		all = append(all, fn)
+		found = append(found, fn)
 	}
 
-	sort.Slice(all, func(i, k int) bool {
-		return all[i].Cost < all[k].Cost
+	sort.Slice(found, func(i, k int) bool {
+		return found[i].Cost < found[k].Cost
 	})
 
-	for _, fn := range all {
-		fmt.Printf("%s:%d: func %s cost +%d\n", fn.File, fn.Line, fn.Func, fn.Cost-fn.Budget)
+	for _, fn := range found {
+		fmt.Printf("%s:%d: func %s cost +%d\n",
+			fn.File, fn.Line, fn.Func, fn.Cost-fn.Budget)
 	}
 }
